@@ -65,11 +65,12 @@ export function queryUp(
   let bindings: any[];
 
   if (prefix) {
+    const escaped = prefix.replace(/%/g, "\\%").replace(/_/g, "\\_");
     sql = `SELECT command FROM history
-           WHERE command LIKE ? || '%'
+           WHERE command LIKE ? || '%' ESCAPE '\\'
            ORDER BY timestamp DESC
            LIMIT 1 OFFSET ?`;
-    bindings = [prefix, offset];
+    bindings = [escaped, offset];
   } else {
     sql = `SELECT command FROM history
            ORDER BY (cwd = ?) DESC, timestamp DESC

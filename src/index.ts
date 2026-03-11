@@ -27,7 +27,7 @@ async function main(): Promise<void> {
       case "add": {
         const command = args[1];
         if (!command || shouldIgnore(command)) {
-          process.exit(0);
+          break;
         }
         addCommand(db, {
           command,
