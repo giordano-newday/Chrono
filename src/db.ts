@@ -112,9 +112,33 @@ export function importHistory(db: Database, filePath: string): number {
   if (!existsSync(filePath)) return 0;
 
   const content = readFileSync(filePath, "utf-8");
-  const lines = content.split("\n").filter((l) => l.trim() !== "");
+  const rawLines = content.split("\n");
 
-  const extendedPattern = /^:\s*(\d+):(\d+);(.+)$/;
+  // Merge continuation lines (lines ending with \)
+  const mergedLines: string[] = [];
+  let buffer = "";
+  for (const line of rawLines) {
+    if (buffer) {
+      if (line.endsWith("\\")) {
+        buffer += line + "\n";
+      } else {
+        buffer += line;
+        mergedLines.push(buffer);
+        buffer = "";
+      }
+    } else {
+      if (line.endsWith("\\")) {
+        buffer = line + "\n";
+      } else {
+        mergedLines.push(line);
+      }
+    }
+  }
+  if (buffer) {
+    mergedLines.push(buffer);
+  }
+
+  const extendedPattern = /^:\s*(\d+):(\d+);(.+)$/s;
   const hostname = process.env.HOST ?? process.env.HOSTNAME ?? "";
   let count = 0;
 
@@ -125,7 +149,8 @@ export function importHistory(db: Database, filePath: string): number {
 
   db.exec("BEGIN TRANSACTION");
   try {
-    for (const line of lines) {
+    for (const line of mergedLines) {
+      if (line.trim() === "") continue;
       const match = line.match(extendedPattern);
       if (match) {
         const timestamp = parseInt(match[1], 10);

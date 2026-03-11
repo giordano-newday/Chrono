@@ -1,7 +1,7 @@
 import { mkdirSync, existsSync } from "node:fs";
 import { CHRONO_DIR, DB_PATH } from "./constants";
 import { openDb, addCommand, queryUp, importHistory, getStats } from "./db";
-import { runFzfSearch } from "./search";
+import { runFzfSearch, collapseCommand } from "./search";
 import { shouldIgnore } from "./ignore";
 
 function ensureChronoDir(): void {
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
           offset,
         });
         if (result) {
-          process.stdout.write(result);
+          process.stdout.write(collapseCommand(result));
         } else {
           process.exit(1);
         }

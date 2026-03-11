@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatSearchRow, parseSelectedLine } from "../src/search";
+import { formatSearchRow, parseSelectedLine, collapseCommand } from "../src/search";
 import type { SearchRow } from "../src/db";
 
 describe("formatSearchRow", () => {
@@ -41,6 +41,48 @@ describe("formatSearchRow", () => {
     const line = formatSearchRow(row);
     expect(line).toContain("?");
     expect(line).toContain("echo hello");
+  });
+
+  test("collapses multiline command for fzf display", () => {
+    const row: SearchRow = {
+      id: 4,
+      command: "docker run \\\n  --rm \\\n  nginx",
+      cwd: "/project",
+      timestamp: 1700000000,
+      exit_code: 0,
+    };
+    const line = formatSearchRow(row);
+    expect(line).not.toContain("\n");
+    expect(line).toContain("docker run --rm nginx");
+  });
+});
+
+describe("collapseCommand", () => {
+  test("returns single-line commands unchanged", () => {
+    expect(collapseCommand("git status")).toBe("git status");
+  });
+
+  test("joins continuation lines with space", () => {
+    expect(collapseCommand("docker run \\\n  --rm \\\n  nginx"))
+      .toBe("docker run --rm nginx");
+  });
+
+  test("joins real newlines with semicolons", () => {
+    expect(collapseCommand("cd /tmp\nls -la"))
+      .toBe("cd /tmp; ls -la");
+  });
+
+  test("handles mixed continuation and real newlines", () => {
+    expect(collapseCommand("docker run \\\n  --rm \\\n  nginx\necho done"))
+      .toBe("docker run --rm nginx; echo done");
+  });
+
+  test("handles empty string", () => {
+    expect(collapseCommand("")).toBe("");
+  });
+
+  test("handles trailing backslash without newline", () => {
+    expect(collapseCommand("echo hello\\")).toBe("echo hello\\");
   });
 });
 

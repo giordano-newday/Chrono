@@ -234,6 +234,53 @@ describe("importHistory", () => {
     const count = importHistory(db, join(tempDir, "nope"));
     expect(count).toBe(0);
   });
+
+  test("merges continuation lines (backslash + newline) into one command", () => {
+    const file = join(tempDir, "multiline_history");
+    writeFileSync(
+      file,
+      ": 1700000000:0;docker run \\\n  --rm \\\n  -v /data:/data \\\n  nginx\n"
+    );
+
+    const count = importHistory(db, file);
+    expect(count).toBe(1);
+
+    const rows = db.query("SELECT * FROM history").all() as any[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].command).toContain("docker run");
+    expect(rows[0].command).toContain("nginx");
+    expect(rows[0].command).toContain("--rm");
+  });
+
+  test("merges plain-format continuation lines", () => {
+    const file = join(tempDir, "plain_multiline");
+    writeFileSync(file, "echo hello \\\nworld\ngit status\n");
+
+    const count = importHistory(db, file);
+    expect(count).toBe(2);
+
+    const rows = db.query("SELECT command FROM history ORDER BY id").all() as any[];
+    expect(rows[0].command).toContain("hello");
+    expect(rows[0].command).toContain("world");
+    expect(rows[1].command).toBe("git status");
+  });
+
+  test("handles mixed single and multiline commands", () => {
+    const file = join(tempDir, "mixed_history");
+    writeFileSync(
+      file,
+      ": 1700000000:0;git status\n: 1700000001:0;docker run \\\n  --rm \\\n  nginx\n: 1700000002:0;ls -la\n"
+    );
+
+    const count = importHistory(db, file);
+    expect(count).toBe(3);
+
+    const rows = db.query("SELECT command FROM history ORDER BY timestamp").all() as any[];
+    expect(rows[0].command).toBe("git status");
+    expect(rows[1].command).toContain("docker run");
+    expect(rows[1].command).toContain("nginx");
+    expect(rows[2].command).toBe("ls -la");
+  });
 });
 
 describe("getStats", () => {

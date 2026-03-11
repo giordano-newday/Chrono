@@ -10,7 +10,26 @@ export function formatSearchRow(row: SearchRow): string {
   const dateStr = date.toISOString().slice(0, 10);
   const timeStr = date.toTimeString().slice(0, 5);
 
-  return `  ${exitIndicator}  ${dateStr}  ${timeStr}  ${row.cwd}  │ ${row.command}`;
+  const displayCmd = collapseCommand(row.command);
+
+  return `  ${exitIndicator}  ${dateStr}  ${timeStr}  ${row.cwd}  │ ${displayCmd}`;
+}
+
+/**
+ * Collapse a multiline command into a single line for display.
+ * - Continuation lines (ending with \) are joined with a space
+ * - Real newlines (separate statements) are joined with "; "
+ */
+export function collapseCommand(command: string): string {
+  if (!command.includes("\n")) return command;
+
+  // Replace shell continuation (\<newline><whitespace>) with single space
+  let result = command.replace(/\s*\\\n\s*/g, " ");
+
+  // Replace remaining real newlines with "; "
+  result = result.replace(/\n/g, "; ");
+
+  return result;
 }
 
 export function parseSelectedLine(line: string): string {
