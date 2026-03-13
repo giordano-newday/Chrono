@@ -1,6 +1,6 @@
 import { mkdirSync, existsSync } from "node:fs";
 import { CHRONO_DIR, DB_PATH } from "./constants";
-import { openDb, addCommand, queryUp, importHistory, getStats } from "./db";
+import { openDb, addCommand, queryUp, importHistory, getStats, dedup, resetHistory } from "./db";
 import { runFzfSearch, collapseCommand } from "./search";
 import { shouldIgnore } from "./ignore";
 
@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const subcommand = args[0];
 
   if (!subcommand) {
-    console.log("Usage: chrono <add|up|search|import|stats>");
+    console.log("Usage: chrono <add|up|search|import|stats|dedup|reset>");
     process.exit(1);
   }
 
@@ -76,7 +76,8 @@ async function main(): Promise<void> {
       case "import": {
         const filePath = args[1] ?? `${process.env.HOME}/.zsh_history`;
         const count = importHistory(db, filePath);
-        console.log(`Imported ${count} commands from ${filePath}`);
+        const removed = dedup(db);
+        console.log(`Imported ${count} commands from ${filePath} (${removed} duplicates removed)`);
         break;
       }
 
@@ -90,6 +91,21 @@ async function main(): Promise<void> {
           const bar = "█".repeat(Math.round((count / maxCount) * barWidth));
           console.log(`  ${bar} ${count.toString().padStart(5)}  ${command}`);
         }
+        break;
+      }
+
+      case "dedup": {
+        const removed = dedup(db);
+        console.log(`Removed ${removed} duplicate commands`);
+        break;
+      }
+
+      case "reset": {
+        const filePath = args[1] ?? `${process.env.HOME}/.zsh_history`;
+        resetHistory(db);
+        const count = importHistory(db, filePath);
+        const removed = dedup(db);
+        console.log(`Reset complete — imported ${count} commands from ${filePath} (${removed} duplicates removed)`);
         break;
       }
 

@@ -3,16 +3,13 @@ import type { SearchRow } from "./db";
 import { querySearch } from "./db";
 
 export function formatSearchRow(row: SearchRow): string {
-  const exitIndicator =
-    row.exit_code === null ? "?" : row.exit_code === 0 ? "✓" : "✗";
-
   const date = new Date(row.timestamp * 1000);
   const dateStr = date.toISOString().slice(0, 10);
   const timeStr = date.toTimeString().slice(0, 5);
 
   const displayCmd = collapseCommand(row.command);
 
-  return `  ${exitIndicator}  ${dateStr}  ${timeStr}  ${row.cwd}  │ ${displayCmd}`;
+  return `${dateStr} ${timeStr}  ${displayCmd}`;
 }
 
 /**
@@ -34,9 +31,22 @@ export function collapseCommand(command: string): string {
 
 export function parseSelectedLine(line: string): string {
   if (!line) return "";
-  const delimiterIndex = line.indexOf("│");
-  if (delimiterIndex === -1) return line.trim();
-  return line.slice(delimiterIndex + 1).trim();
+  // Format: "2026-03-12 11:02  git status"
+  // Skip past "YYYY-MM-DD HH:MM  " (18 chars)
+  const match = line.match(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}  (.+)$/);
+  return match ? match[1].trim() : line.trim();
+}
+
+export function buildFzfArgs(): string[] {
+  return [
+    "--ansi",
+    "--no-sort",
+    "--layout=reverse-list",
+    "--sync",
+    "--bind",
+    "start:last",
+    "--pointer=❯",
+  ];
 }
 
 export async function runFzfSearch(
@@ -48,9 +58,10 @@ export async function runFzfSearch(
   const rows = querySearch(db, { scope, cwd, session });
   if (rows.length === 0) return null;
 
-  const input = rows.map(formatSearchRow).join("\n");
+  const lines = rows.map(formatSearchRow);
+  const input = lines.join("\n");
 
-  const proc = Bun.spawn(["fzf", "--ansi", "--no-sort", "--tac"], {
+  const proc = Bun.spawn(["fzf", ...buildFzfArgs()], {
     stdin: "pipe",
     stdout: "pipe",
     stderr: "inherit",

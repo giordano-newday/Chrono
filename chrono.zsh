@@ -32,7 +32,7 @@ chrono_precmd() {
   fi
   _chrono_preexec_timestamp=0
 
-  "$CHRONO_BIN" add "$cmd" "$duration" "$exit_code" &!
+  "$CHRONO_BIN" add "$cmd" "$duration" "$exit_code" </dev/null >/dev/null 2>&1
 }
 
 autoload -Uz add-zsh-hook
@@ -53,11 +53,14 @@ chrono-up() {
 
   local result
   result=$("$CHRONO_BIN" up "$_chrono_up_prefix" "$_chrono_up_offset" 2>/dev/null)
+  local ret=$?
 
-  if [[ $? -eq 0 && -n "$result" ]]; then
+  if [[ $ret -eq 0 && -n "$result" ]]; then
     BUFFER="$result"
     CURSOR=${#BUFFER}
     (( _chrono_up_offset++ ))
+  else
+    zle up-line-or-history
   fi
 }
 
@@ -75,27 +78,15 @@ chrono-down() {
   local actual_offset=$(( _chrono_up_offset - 1 ))
   local result
   result=$("$CHRONO_BIN" up "$_chrono_up_prefix" "$actual_offset" 2>/dev/null)
+  local ret=$?
 
-  if [[ $? -eq 0 && -n "$result" ]]; then
+  if [[ $ret -eq 0 && -n "$result" ]]; then
     BUFFER="$result"
     CURSOR=${#BUFFER}
+  else
+    zle down-line-or-history
   fi
 }
-
-chrono-reset() {
-  _chrono_up_prefix=""
-  _chrono_up_offset=0
-  _chrono_up_original=""
-}
-
-zle -N chrono-up
-zle -N chrono-down
-zle -N zle-line-init chrono-reset
-
-bindkey '^[[A' chrono-up      # Up arrow
-bindkey '^[OA' chrono-up      # Up arrow (alternate)
-bindkey '^[[B' chrono-down    # Down arrow
-bindkey '^[OB' chrono-down    # Down arrow (alternate)
 
 # ── Ctrl+R ────────────────────────────────────────────────
 
@@ -111,5 +102,36 @@ chrono-search() {
   zle reset-prompt
 }
 
+# ── Widget and Key Binding Setup ──────────────────────────
+# Register widgets once at source time
+zle -N chrono-up
+zle -N chrono-down
 zle -N chrono-search
-bindkey '^R' chrono-search
+
+# Apply bindings via precmd to run AFTER all other plugins (oh-my-zsh,
+# zsh-autosuggestions) have finished. Re-applied every prompt to survive
+# re-wrapping by zsh-autosuggestions (which also re-binds on every precmd).
+_chrono_apply_bindings() {
+  _chrono_up_prefix=""
+  _chrono_up_offset=0
+  _chrono_up_original=""
+
+  bindkey -M emacs '^[[A' chrono-search
+  bindkey -M emacs '^[OA' chrono-search
+  bindkey -M emacs '^[[B' chrono-down
+  bindkey -M emacs '^[OB' chrono-down
+  bindkey -M emacs '^R' chrono-search
+
+  bindkey -M viins '^[[A' chrono-search
+  bindkey -M viins '^[OA' chrono-search
+  bindkey -M viins '^[[B' chrono-down
+  bindkey -M viins '^[OB' chrono-down
+  bindkey -M viins '^R' chrono-search
+
+  bindkey -M vicmd '^[[A' chrono-search
+  bindkey -M vicmd '^[OA' chrono-search
+  bindkey -M vicmd '^[[B' chrono-down
+  bindkey -M vicmd '^[OB' chrono-down
+}
+
+add-zsh-hook precmd _chrono_apply_bindings

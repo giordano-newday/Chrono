@@ -25,34 +25,69 @@ export interface Stats {
   top: { command: string; count: number }[];
 }
 
+function normalizeCommand(command: string): string {
+  return command.trim();
+}
+
+function migrateNormalizedCommands(db: Database): void {
+  const versionRow = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (versionRow.user_version >= 1) {
+    return;
+  }
+
+  db.exec("BEGIN TRANSACTION");
+  try {
+    db.exec("UPDATE history SET command = TRIM(command) WHERE command != TRIM(command)");
+    db.exec(`
+      DELETE FROM history
+      WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY command ORDER BY timestamp DESC, id DESC) AS rn
+          FROM history
+        ) WHERE rn = 1
+      )
+    `);
+    db.exec("PRAGMA user_version = 1");
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}
+
 export function openDb(path: string): Database {
   const db = new Database(path, { create: true });
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec(SCHEMA_SQL);
+  migrateNormalizedCommands(db);
   return db;
 }
 
 export function addCommand(db: Database, entry: CommandEntry): void {
-  const last = db
-    .query("SELECT command FROM history WHERE session = ? ORDER BY id DESC LIMIT 1")
-    .get(entry.session) as { command: string } | null;
+  const command = normalizeCommand(entry.command);
 
-  if (last && last.command === entry.command) {
-    return;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    // Delete any existing entry for this command (global dedup, keep newest)
+    db.query("DELETE FROM history WHERE TRIM(command) = ?").run(command);
+
+    db.query(
+      `INSERT INTO history (command, cwd, hostname, timestamp, duration, exit_code, session)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      command,
+      entry.cwd,
+      entry.hostname,
+      entry.timestamp,
+      entry.duration ?? null,
+      entry.exitCode ?? null,
+      entry.session,
+    );
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
   }
-
-  db.query(
-    `INSERT INTO history (command, cwd, hostname, timestamp, duration, exit_code, session)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    entry.command,
-    entry.cwd,
-    entry.hostname,
-    entry.timestamp,
-    entry.duration ?? null,
-    entry.exitCode ?? null,
-    entry.session,
-  );
 }
 
 export function queryUp(
@@ -68,12 +103,12 @@ export function queryUp(
     const escaped = prefix.replace(/%/g, "\\%").replace(/_/g, "\\_");
     sql = `SELECT command FROM history
            WHERE command LIKE ? || '%' ESCAPE '\\'
-           ORDER BY timestamp DESC
+           ORDER BY timestamp DESC, id DESC
            LIMIT 1 OFFSET ?`;
     bindings = [escaped, offset];
   } else {
     sql = `SELECT command FROM history
-           ORDER BY (cwd = ?) DESC, timestamp DESC
+           ORDER BY (cwd = ?) DESC, timestamp DESC, id DESC
            LIMIT 1 OFFSET ?`;
     bindings = [cwd, offset];
   }
@@ -103,7 +138,7 @@ export function querySearch(
     .query(
       `SELECT id, command, cwd, timestamp, exit_code
        FROM history ${where}
-       ORDER BY timestamp DESC`
+       ORDER BY timestamp ASC, id ASC`
     )
     .all(...bindings) as SearchRow[];
 }
@@ -155,10 +190,10 @@ export function importHistory(db: Database, filePath: string): number {
       if (match) {
         const timestamp = parseInt(match[1], 10);
         const duration = parseInt(match[2], 10) * 1000;
-        const command = match[3];
+        const command = normalizeCommand(match[3]);
         insert.run(command, hostname, timestamp, duration);
       } else {
-        insert.run(line, hostname, Math.floor(Date.now() / 1000), null);
+        insert.run(normalizeCommand(line), hostname, Math.floor(Date.now() / 1000), null);
       }
       count++;
     }
@@ -169,6 +204,35 @@ export function importHistory(db: Database, filePath: string): number {
   }
 
   return count;
+}
+
+export function resetHistory(db: Database): void {
+  db.exec("DELETE FROM history");
+}
+
+export function dedup(db: Database): number {
+  const countBefore = (db.query("SELECT COUNT(*) as c FROM history").get() as { c: number }).c;
+
+  db.exec("BEGIN TRANSACTION");
+  try {
+    db.exec("UPDATE history SET command = TRIM(command) WHERE command != TRIM(command)");
+    db.exec(`
+      DELETE FROM history
+      WHERE id NOT IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (PARTITION BY command ORDER BY timestamp DESC, id DESC) AS rn
+          FROM history
+        ) WHERE rn = 1
+      )
+    `);
+    db.exec("COMMIT");
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+
+  const countAfter = (db.query("SELECT COUNT(*) as c FROM history").get() as { c: number }).c;
+  return countBefore - countAfter;
 }
 
 export function getStats(db: Database): Stats {

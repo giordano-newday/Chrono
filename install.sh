@@ -28,6 +28,7 @@ bun install --frozen-lockfile 2>/dev/null || bun install
 
 echo "🔨 Building chrono binary..."
 bun build src/index.ts --compile --outfile chrono
+codesign -f -s - chrono 2>/dev/null || true
 
 # ── Install ───────────────────────────────────────────────
 echo "📂 Installing to $CHRONO_DIR..."

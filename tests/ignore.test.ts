@@ -2,36 +2,36 @@ import { describe, expect, test } from "bun:test";
 import { shouldIgnore } from "../src/ignore";
 
 describe("shouldIgnore", () => {
-  test("ignores 'ls'", () => {
-    expect(shouldIgnore("ls")).toBe(true);
+  test("does NOT ignore 'ls'", () => {
+    expect(shouldIgnore("ls")).toBe(false);
   });
 
-  test("ignores 'll'", () => {
-    expect(shouldIgnore("ll")).toBe(true);
+  test("does NOT ignore 'll'", () => {
+    expect(shouldIgnore("ll")).toBe(false);
   });
 
-  test("ignores 'la'", () => {
-    expect(shouldIgnore("la")).toBe(true);
+  test("does NOT ignore 'la'", () => {
+    expect(shouldIgnore("la")).toBe(false);
   });
 
-  test("ignores 'pwd'", () => {
-    expect(shouldIgnore("pwd")).toBe(true);
+  test("does NOT ignore 'pwd'", () => {
+    expect(shouldIgnore("pwd")).toBe(false);
   });
 
-  test("ignores 'cd'", () => {
-    expect(shouldIgnore("cd")).toBe(true);
+  test("does NOT ignore 'cd'", () => {
+    expect(shouldIgnore("cd")).toBe(false);
   });
 
-  test("ignores 'clear'", () => {
-    expect(shouldIgnore("clear")).toBe(true);
+  test("does NOT ignore 'clear'", () => {
+    expect(shouldIgnore("clear")).toBe(false);
   });
 
-  test("ignores 'exit'", () => {
-    expect(shouldIgnore("exit")).toBe(true);
+  test("does NOT ignore 'exit'", () => {
+    expect(shouldIgnore("exit")).toBe(false);
   });
 
-  test("ignores 'history'", () => {
-    expect(shouldIgnore("history")).toBe(true);
+  test("does NOT ignore 'history'", () => {
+    expect(shouldIgnore("history")).toBe(false);
   });
 
   test("ignores whitespace-only commands", () => {
